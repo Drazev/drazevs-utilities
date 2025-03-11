@@ -1,0 +1,106 @@
+#!/bin/bash
+# Utility program created by Jayson Mendoza
+# Searches all files in a heiarchy from an origin location using grep and find
+# Use it to scan a variety of files for tokens
+declare searchPattern=""
+declare filePatternRegex=""
+declare searchRootPath=""
+declare GREP_EXTRA_OPTS=""
+declare -a fileTypesSelected=()
+declare -A FILE_TYPES=()
+FILE_TYPES[c]="c"
+FILE_TYPES[h]="h"
+FILE_TYPES[cpp]="cpp cc"
+
+function main() {
+    dependencyCheck;
+    parseArgs $@;
+    [ -z "$searchPattern" ] && echo "Search Pattern cannot be empty." >&2 && exit 1
+    local fileRegex=""
+    for token in "${fileTypesSelected[@]}"; do
+        [ -n "$fileRegex" ] && fileRegex+="|"
+        fileRegex+="$token"
+    done
+    fileRegex=".*($fileRegex)"
+    grep -n "$GREP_EXTRA_OPTS" "$searchPattern" `find -type f -regextype posix-extended -iregex $fileRegex`
+    echo "[INFO] Searched #${#fileTypesSelected[@]} file types: ${fileTypesSelected[@]}"
+    echo "[INFO] Search Origin: $searchRootPath"
+    echo "[INFO] Search Pattern: $searchPattern"
+}
+
+function dependencyCheck() {
+    local -a missingCommands=()
+    [ -z "$(command -v find)" ] && missingCommands+=('find')
+    [ -z "$(command -v grep)" ] && missingCommands+=('grep')
+    
+    if [[ ${#missingCommands[@]} > 0 ]]; then
+        echo "Please install missing programs: ${missingCommands[@]}";
+        exit 1;
+    fi
+}
+
+function printHelp() {
+    echo "Utility to search all files for specific tokens or pattern."
+    echo "Outputs each file and line that matched including a reference number"
+    echo "usage: $0 [search Dir] [options] <search pattern...>"
+    echo "OPTIONS"
+    echo "--------------------"
+    echo "-?|--help) Print this help then exit."
+    echo "-c|--c) Search C code files"
+    echo "-re|regex) Treat search pattern as extended regex for grep command"
+    echo "-x <pattern> |--extension <pattern>) Add <pattern> extension to file search. Can be added multiple times." 
+    echo "-h|--headers) Search header files"
+    echo "-cpp|--cplusplus) Search C plus plus code files including cpp and cc files"
+    echo "DEFAULT FILES SEARCHED: All supported file types are searched if no options are given"
+    echo "Example: $0 ~/ -cpp -h DEBUG"
+    echo "Searches all files from ~/ that are cpp or header files for the DEBUG token"
+    echo "Example: $0 -cpp -h DEBUG"
+    echo "Searches all files from present working directory for cpp or header files for the DEBUG token"
+    echo "Example: $0 DEBUG"
+    echo "Searches all files from present working directory for all supported types for the DEBUG token"
+}
+
+function parseArgs() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -c|--c)
+                fileTypesSelected+=(${FILE_TYPES["c"]})
+                shift;
+                ;;
+            -h|--headers)
+                fileTypesSelected+=(${FILE_TYPES["h"]})
+                shift;
+                ;;
+            -cpp|--cplusplus)
+                fileTypesSelected+=(${FILE_TYPES["cpp"]})
+                shift;
+                ;;
+            -re|--regex)
+                GREP_EXTRA_OPTS+="-E"
+                shift;
+                ;;
+            -x|--extension)
+                shift
+                fileTypesSelected+=("$1")
+                shift;
+                ;;
+            -?|--help)
+                printHelp
+                exit 0
+                ;;
+            *)
+                if [[ $# > 1 ]] && [ -z "$searchRootPath" ]; then
+                    searchRootPath="$1"
+                    shift
+                else
+                    break;
+                fi
+
+                ;;
+        esac
+    done
+    [ -z "$fileTypesSelected" ] && fileTypesSelected=(${FILE_TYPES[@]})
+    searchPattern="$@"
+}
+
+main $@
